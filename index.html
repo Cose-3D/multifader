@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fader Mixer MIDI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="language-container" class="language-container">
+    <span id="language-label" class="language-button">🌐 Cambia lingua</span>
+    <div id="language-options" class="language-options">
+      <div data-lang="it">🇮🇹 Italiano</div>
+      <div data-lang="en">🇬🇧 English</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h1 class="panel-title" id="panelTitle">Configuratore <span class="fader-name">MultiFader</span></h1>
+    <div class="top-bar">
+      
+      <!-- Interruttore verticale a sinistra -->
+      <div class="switch-container">
+        <label class="switch-label">
+          <input type="checkbox" id="toggleSwitch" disabled />
+          <span class="slider-switch"></span>
+        </label>
+      </div>
+
+      <!-- Interruttore centrale Disabilita fader -->
+      <div class="fader-toggle-wrapper">
+        <label class="fader-toggle-label">
+          <input type="checkbox" id="faderToggle" />
+          <span class="fader-switch"></span>
+          <span class="fader-text" id="faderText">Disabilita Fader 1-3</span>
+        </label>
+        <div class="led-controls">
+          <button class="led-button" id="ledButton"></button>
+          <input type="range" min="0" max="254" value="127" class="led-slider" id="ledSlider">
+        </div>
+      </div>
+
+      <!-- Pulsante connessione a destra -->
+      <button id="connectButton">Connetti</button>
+    </div>
+
+    <div class="container container-1"></div>
+    <div class="container container-2" style="display: none;"></div>
+
+    <!-- Sezione Layout Tastiera -->
+    <div class="keyboard-layout-section" id="keyboardLayoutSection">
+      <div class="keyboard-layout-label">Layout Tastiera per Hotkey</div>
+      <select class="keyboard-layout-select" id="keyboardLayoutSelect" onchange="currentKeyboardLayoutCode = parseInt(this.value)">
+        <option value="0">English (US)</option>
+        <option value="1">Italiano</option>
+        <option value="2">Magyar</option>
+        <option value="3">Español</option>
+        <option value="4">Français</option>
+        <option value="5">Português</option>
+        <option value="6">Svenska</option>
+        <option value="7">Dansk</option>
+        <option value="8">Deutsch</option>      
+      </select>
+    </div>
+
+    <div class="hotkey-spoiler">
+      <div class="hotkey-spoiler-header">
+        <span>ℹ️ Informazioni Hotkey Automatiche</span>
+        <span class="spoiler-arrow">▼</span>
+      </div>
+      <div class="hotkey-spoiler-content">
+        <p>
+          È possibile cambiare le scorciatoie attive catturando diverse sequenze di tasti che verranno poi attivate quando il Fader corrispondente va verso lo 0 ⬇️, o quando si allontana dallo 0 ⬆️.
+          <br /><br />
+          🎧 A cosa può servire questo sistema? Un esempio con deej può essere l'associazione delle scorciatoie per mettere in Play/Pausa un'applicazione multimediale in modo che abbassandone il volume la riproduzione non continui. Quando il volume viene alzato di nuovo, la seconda scorciatoia può essere utile a far ripartire il contenuto multimediale in automatico.
+          <br /><br />
+          🎼 Un esempio nel campo dell'esecuzione MIDI: quando il fader va a 0 la prima scorciatoia attiva/disattiva degli effetti che vengono poi ripristinati in automatico con la seconda scorciatoia quando si rialza il fader.
+        </p>
+      </div>
+    </div>
+    
+    <!-- Pulsante Salva (inizialmente nascosto) -->
+    <button id="saveButton">Salva nel Dispositivo</button>
+    <h4 id="saveButtonDescription">Salva la configurazione corrente nel dispositivo in modo che permanga al riavvio</h4>
+  </div>
+
+  <script>
+
+    document.addEventListener("DOMContentLoaded", function() {
+      // Rilevazione della lingua salvata o della lingua del browser
+      const userLang = localStorage.getItem("lang") || navigator.language || navigator.userLanguage;
+      const langCode = userLang.substring(0, 2);
+      if (langCode !== "it") {
+        window.location.href = "index-en.html";
+      }
+      
+      const languageLabel = document.getElementById("language-label");
+      const languageOptions = document.getElementById("language-options");
+
+      // Al click sul pulsante, il menu con le opzioni viene visualizzato subito
+      languageLabel.addEventListener("click", function(e) {
+        e.stopPropagation(); // Previene la propagazione per evitare di chiudere subito il menu
+        languageOptions.style.display = (languageOptions.style.display === "block") ? "none" : "block";
+      });
+
+      // Aggiunge il listener su ogni opzione
+      const options = languageOptions.querySelectorAll("div[data-lang]");
+      options.forEach(function(option) {
+        option.addEventListener("click", function() {
+          const selectedLang = this.getAttribute("data-lang");
+          localStorage.setItem("lang", selectedLang);
+          window.location.href = (selectedLang === "en") ? "index-en.html" : "index.html";
+        });
+      });
+
+      // Nasconde il menu se si clicca fuori dal contenitore
+      document.addEventListener("click", function(e) {
+        if (!document.getElementById("language-container").contains(e.target)) {
+          languageOptions.style.display = "none";
+        }
+      });
+    });
+    
+    const group1 = document.querySelector('.container-1');
+    const group2 = document.querySelector('.container-2');
+    const faderToggle = document.getElementById('faderToggle');
+    const faderText = document.getElementById('faderText');
+    const toggle = document.getElementById('toggleSwitch');
+    const connectBtn = document.getElementById('connectButton');
+    const saveBtn = document.getElementById('saveButton');
+    const saveDesc = document.getElementById('saveButtonDescription');
+    const panelTitle = document.getElementById('panelTitle');
+    const keyboardLayoutSection = document.getElementById('keyboardLayoutSection');
+    const keyboardLayoutSelect = document.getElementById('keyboardLayoutSelect');
+    const ledButton = document.getElementById('ledButton');
+    const ledSlider = document.getElementById('ledSlider');
+	
+    let NUM_FADER = 6;
+    let faderStateA = false;
+    let faderStateB = false;
+    let ledStateA = false;
+    let ledStateB = false;
+    let ledValueA = 127;
+    let ledValueB = 127;
+    let currentSession = 'A';
+    let buffer = '';
+    let currentKeyboardLayout = 'it-IT'; // Default italiano
+    let currentKeyboardLayoutCode = 0; // default (English)
+
+    let midiOn = [];
+    let hotkeyOn = [];
+    let midiChannels = [];
+    let midiControlChanges = [];
+
+    // Hotkey capture variables
+    let captureStates = {};
+
+    const supportedLayouts = {
+  'en-US': 0,
+  'it-IT': 1,
+  'hu-HU': 2,
+  'es-ES': 3,
+  'fr-FR': 4,
+  'pt-PT': 5,
+  'sv-SE': 6,
+  'da-DK': 7,
+  'de-DE': 8
+};
+
+function detectAndSetDefaultKeyboardLayout() {
+  const browserLang = navigator.language || navigator.userLanguage;
+
+  if (browserLang in supportedLayouts) {
+    currentKeyboardLayoutCode = supportedLayouts[browserLang];
+  } else {
+    const langCode = browserLang.split('-')[0];
+    const matchingKey = Object.keys(supportedLayouts).find(
+      layout => layout.startsWith(langCode + '-')
+    );
+    if (matchingKey) {
+      currentKeyboardLayoutCode = supportedLayouts[matchingKey];
+    }
+  }
+
+  keyboardLayoutSelect.value = currentKeyboardLayoutCode.toString();
+}
+
+function sendKeyboardLayoutToDevice() {
+  sendCommand(`k,${currentKeyboardLayoutCode}`);
+  console.log(`📤 Inviato layout tastiera: ${currentKeyboardLayoutCode}`);
+}
+
+    // Event listener per cambio layout tastiera
+    keyboardLayoutSelect.addEventListener('change', () => {
+      currentKeyboardLayout = keyboardLayoutSelect.value;
+      sendKeyboardLayoutToDevice();
+    });
+
+    function handleVolumeMessage(volumeIndexValue) {
+      for (let i = 0; i < NUM_FADER; i++) {
+        midiOn[i] = (volumeIndexValue & (1 << i)) !== 0;
+      }
+      
+      document.querySelectorAll('.slider-container').forEach((container, index) => {
+        const modeSelect = container.querySelector('.mode-select');
+        const slider = container.querySelector('.slider');
+        if (midiOn[index]) {
+          modeSelect.value = 'midi';
+          slider.classList.add('midi-mode');
+        } else {
+          modeSelect.value = 'volume';
+          slider.classList.remove('midi-mode');
+        }
+        updateUI(container);
+      });
+    }
+
+    function handleSliderValues(valuesString) {
+      const values = valuesString.split('|');
+//      console.log('📩 Valori slider ricevuti:', values);
+      
+      if (values.length === NUM_FADER) {
+        values.forEach((value, index) => {
+          const rawValue = parseInt(value);
+          if (!isNaN(rawValue) && rawValue >= 0 && rawValue <= 1023) {
+            updateFaderDisplays(index + 1, rawValue);
+          }
+        });
+      } else if (values.length === NUM_FADER / 2) {
+        const halfFaders = NUM_FADER / 2;
+        values.forEach((value, index) => {
+          const rawValue = parseInt(value);
+          if (!isNaN(rawValue) && rawValue >= 0 && rawValue <= 1023) {
+            let faderIndex;
+            if (currentSession === 'A') {
+              faderIndex = index + 1;
+            } else {
+              faderIndex = index + halfFaders + 1;
+            }
+            
+            updateFaderDisplays(faderIndex, rawValue);
+          }
+        });
+      }
+    }
+
+    function updateFaderDisplays(faderIndex, rawValue) {
+      const sliderValue = Math.round((rawValue / 1023) * 100);
+      
+      const sliderId = `slider${faderIndex}`;
+      const positionId = `position${faderIndex}`;
+      
+      const slider = document.getElementById(sliderId);
+      const positionDisplay = document.getElementById(positionId);
+      
+      if (slider) {
+        slider.value = sliderValue;
+      }
+      
+      const faderArrayIndex = faderIndex - 1;
+    }
+
+    function handleHotkeyMessage(hotkeyIndexValue) {
+      for (let i = 0; i < NUM_FADER; i++) {
+        hotkeyOn[i] = (hotkeyIndexValue & (1 << i)) !== 0;
+      }
+      
+      let anyHotkeyEnabled = hotkeyOn.some(enabled => enabled);
+      keyboardLayoutSection.style.display = anyHotkeyEnabled ? 'block' : 'none';
+      
+      document.querySelectorAll('.slider-container').forEach((container, index) => {
+        const hotkeyToggle = container.querySelector('.hotkey-toggle input[type="checkbox"]');
+        const hotkeySection = container.querySelector('.hotkey-capture-section');
+
+        if (hotkeyToggle) {
+          hotkeyToggle.checked = hotkeyOn[index];
+          
+          if (hotkeySection) {
+            hotkeySection.style.display = hotkeyOn[index] ? 'flex' : 'none';
+          }
+        }
+      });
+      
+      // Send keyboard layout when hotkeys are enabled
+      if (anyHotkeyEnabled) {
+        sendKeyboardLayoutToDevice();
+      }
+    }
+
+function convertKeysToHex(keys) {
+  if (keys.length === 0) return null;
+  
+  let modifiers = 0;
+  let mainKeyHex = 0;
+  
+  keys.forEach(key => {
+    switch(key.toLowerCase()) {
+      case 'ctrl':
+        modifiers |= 0x01;
+        break;
+      case 'alt':
+        modifiers |= 0x02;
+        break;
+      case 'shift':
+        modifiers |= 0x04;
+        break;
+      case 'win':
+        modifiers |= 0x08;
+        break;
+      default:
+        const keyHex = getKeyHex(key);
+        if (keyHex !== null) {
+          mainKeyHex = keyHex;
+        }
+        break;
+    }
+  });
+  
+  return `${modifiers.toString(16).padStart(2, '0').toUpperCase()},${mainKeyHex.toString(16).padStart(2, '0').toUpperCase()}`;
+}
+
+function handleKeyCapture(event, faderIndex, direction) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const pressedKeys = [];
+  
+  // Gestione dei modificatori
+  if (event.ctrlKey) pressedKeys.push('Ctrl');
+  if (event.altKey) pressedKeys.push('Alt');
+  if (event.shiftKey) pressedKeys.push('Shift');
+  if (event.metaKey) pressedKeys.push('Win');
+  
+  // Se è specificamente AltGraph ma non sono già stati aggiunti Ctrl+Alt
+  if (event.key === 'AltGraph' && !event.ctrlKey && !event.altKey) {
+    pressedKeys.push('Ctrl');
+    pressedKeys.push('Alt');
+  }
+  
+  const key = event.key;
+  
+  // IGNORA completamente i tasti modificatori da soli
+  if (['Control', 'Alt', 'Shift', 'Meta', 'OS', 'AltGraph'].includes(key)) {
+    return; // Non fare nulla, aspetta un tasto principale
+  }
+  
+  // Processa solo i tasti principali
+  const keyHex = getKeyHex(key);
+  if (keyHex !== null) {
+    pressedKeys.push(key);
+  } else {
+    console.warn(`Tasto non mappato: ${key}`);
+    return;
+  }
+  
+  // Ora abbiamo modificatori + tasto principale
+  if (pressedKeys.length > 0) {
+    captureStates[faderIndex][direction].keys = pressedKeys;
+    updateHotkeyDisplay(faderIndex, direction);
+    
+    const hexCommand = convertKeysToHex(pressedKeys);
+    console.log(`Hotkey catturata per Fader ${faderIndex} ${direction}: ${pressedKeys.join(' + ')} -> ${hexCommand}`);
+    
+    // Termina sempre la cattura quando c'è un tasto principale
+    setTimeout(() => {
+      if (captureStates[faderIndex] && captureStates[faderIndex][direction].capturing) {
+        toggleHotkeyCapture(faderIndex, direction);
+      }
+    }, 300);
+  }
+}
+
+    function toggleHotkeyCapture(faderIndex, direction) {
+      if (!captureStates[faderIndex]) {
+        captureStates[faderIndex] = {
+          down: {capturing: false, keys: []},
+          up: {capturing: false, keys: []}
+        };
+      }
+      
+      const captureState = captureStates[faderIndex][direction];
+      const btn = document.querySelector(`#hotkey-capture-${direction}-${faderIndex}`);
+      
+      if (!captureState.capturing) {
+        captureState.capturing = true;
+        captureState.keys = [];
+        btn.textContent = '🛑 Stop';
+        btn.classList.add('capturing');
+        updateHotkeyDisplay(faderIndex, direction);
+      } else {
+        captureState.capturing = false;
+        btn.textContent = `Cattura ${direction === 'down' ? '⬇️' : '⬆️'}`;
+        btn.classList.remove('capturing');
+      }
+    }
+
+    function updateHotkeyDisplay(faderIndex, direction) {
+      const display = document.querySelector(`#hotkey-display-${direction}-${faderIndex}`);
+      if (!display) return;
+
+      const captureState = captureStates[faderIndex] && captureStates[faderIndex][direction];
+      if (!captureState || captureState.keys.length === 0) {
+        display.className = 'hotkey-capture-display';
+        display.innerHTML = '';
+        return;
+      }
+
+      display.className = 'hotkey-capture-display captured';
+      const keyStrings = captureState.keys.map(key => `<span class="key-combo">${key}</span>`);
+      display.innerHTML = keyStrings.join(' + ');
+    }
+
+    const keyToHexMap = {
+      'Backspace': 0xB2,
+      'CapsLock': 0xC1,
+      'Delete': 0xD4,
+      'ArrowDown': 0xD9,
+      'End': 0xD5,
+      'Enter': 0xB0,
+      'Escape': 0xB1,
+      'Esc': 0xB1,
+      'F1': 0xC2,
+      'F2': 0xC3,
+      'F3': 0xC4,
+      'F4': 0xC5,
+      'F5': 0xC6,
+      'F6': 0xC7,
+      'F7': 0xC8,
+      'F8': 0xC9,
+      'F9': 0xCA,
+      'F10': 0xCB,
+      'F11': 0xCC,
+      'F12': 0xCD,
+      'F13': 0xF0,
+      'F14': 0xF1,
+      'F15': 0xF2,
+      'F16': 0xF3,
+      'F17': 0xF4,
+      'F18': 0xF5,
+      'F19': 0xF6,
+      'F20': 0xF7,
+      'F21': 0xF8,
+      'F22': 0xF9,
+      'F23': 0xFA,
+      'F24': 0xFB,
+      'Home': 0xD2,
+      'Insert': 0xD1,
+      'ArrowLeft': 0xD8,
+      'Left': 0xD8,
+      'AltLeft': 0x82,
+      'ControlLeft': 0x80,
+      'MetaLeft': 0x83,
+      'ShiftLeft': 0x81,
+      'ContextMenu': 0xED,
+      'Menu': 0xED,
+      'ArrowRight': 0xD7,
+      'Right': 0xD7,
+      'AltRight': 0x86,
+      'ControlRight': 0x84,
+      'MetaRight': 0x87,
+      'ShiftRight': 0x85,
+      'ScrollLock': 0xCF,
+      ' ': 0x20,
+      'Tab': 0xB3,
+      'ArrowUp': 0xDA,
+      'Up': 0xDA,
+      'Down': 0xD9,
+      'NumLock': 0xDB,
+      'PageUp': 0xD3,
+      'PageDown': 0xD6,
+      'Pause': 0xD0,
+      'PrintScreen': 0xCE,
+      'Win': 0x83,
+      'Ctrl': 0x80,
+      'Alt': 0x82,
+      'Shift': 0x81,
+      'Numpad0': 0xEA,
+      'Numpad1': 0xE1,
+      'Numpad2': 0xE2,
+      'Numpad3': 0xE3,
+      'Numpad4': 0xE4,
+      'Numpad5': 0xE5,
+      'Numpad6': 0xE6,
+      'Numpad7': 0xE7,
+      'Numpad8': 0xE8,
+      'Numpad9': 0xE9,
+      'NumpadDivide': 0xDC,
+      'NumpadDecimal': 0xEB,
+      'NumpadEnter': 0xE0,
+      'NumpadSubtract': 0xDE,
+      'NumpadMultiply': 0xDD,
+      'NumpadAdd': 0xDF,
+      'AltGraph': 0xc0
+    };
+
+    const keyboardSpecialChars = {
+'it-IT': {
+  'à': 136 + 0x34,
+  'è': 136 + 0x2f,
+  'ì': 136 + 0x2e,
+  'ò': 136 + 0x33,
+  'ù': 136 + 0x31,
+},
+'hu-HU': {
+  'á': 136 + 0x34,
+  'é': 136 + 0x33,
+  'í': 136 + 0x32,
+  'ó': 136 + 0x2e,
+  'ú': 136 + 0x30,
+  'ö': 136 + 0x27,
+  'ü': 136 + 0x2d,
+  'ő': 136 + 0x2f,
+  'ű': 136 + 0x31,
+},
+'es-ES': {
+  'á': 136 + 0x34,
+  'é': 136 + 0x2f,
+  'í': 136 + 0x2e,
+  'ó': 136 + 0x33,
+  'ú': 136 + 0x31,
+  'ñ': 136 + 0x33,
+  'ü': 136 + 0x30,
+},
+'fr-FR': {
+  'à': 136 + 0x27,
+  'è': 136 + 0x24,
+  'é': 136 + 0x1f,
+  'ù': 136 + 0x34,
+  'ç': 136 + 0x26,
+  'â': 136 + 0x2f,
+  'ê': 136 + 0x2f,
+  'î': 136 + 0x2f,
+  'ô': 136 + 0x2f,
+  'û': 136 + 0x2f,
+},
+'pt-PT': {
+  'á': 136 + 0x30,
+  'à': 136 + 0x38,
+  'â': 136 + 0x39,
+  'ã': 136 + 0x3a,
+  'é': 136 + 0x2f,
+  'ê': 136 + 0x3b,
+  'í': 136 + 0x2e,
+  'ó': 136 + 0x33,
+  'ô': 136 + 0x3c,
+  'õ': 136 + 0x3d,
+  'ú': 136 + 0x31,
+  'ç': 136 + 0x33,
+},
+'sv-SE': {
+  'å': 136 + 0x2f,
+  'ä': 136 + 0x34,
+  'ö': 136 + 0x33,
+},
+'da-DK': {
+  'æ': 136 + 0x33,
+  'ø': 136 + 0x34,
+  'å': 136 + 0x2f,
+},
+'de-DE': {
+  'ä': 136 + 0x34,
+  'ö': 136 + 0x33,
+  'ü': 136 + 0x2f,
+  'ß': 136 + 0x2d,
+}
+
+};
+
+
+function getKeyHex(key) {
+  // Aggiungi AltGraph alla mappa base
+  const extendedKeyMap = {
+    ...keyToHexMap,
+    'AltGraph': 0x86 // Anche se viene gestito come modificatore
+  };
+  
+  // Prima controlla nella mappa base
+  if (extendedKeyMap[key]) {
+    return extendedKeyMap[key];
+  }
+  
+  // Poi controlla i caratteri speciali del layout corrente
+  const currentLayoutCode = parseInt(keyboardLayoutSelect.value);
+  const layoutName = Object.keys(supportedLayouts).find(
+    layout => supportedLayouts[layout] === currentLayoutCode
+  );
+  
+  if (layoutName && keyboardSpecialChars[layoutName] && keyboardSpecialChars[layoutName][key]) {
+    return keyboardSpecialChars[layoutName][key];
+  }
+  
+  // Per caratteri ASCII standard
+  if (key.length === 1) {
+    const charCode = key.charCodeAt(0);
+    if (charCode <= 127) {
+      return charCode;
+    }
+  }
+  
+  console.warn(`Tasto non mappato per layout ${layoutName}: "${key}" (charCode: ${key.charCodeAt(0)})`);
+  return null;
+}
+
+    function sendHotkeys(faderIndex) {
+      const downKeys = captureStates[faderIndex] && captureStates[faderIndex].down.keys || [];
+      const upKeys = captureStates[faderIndex] && captureStates[faderIndex].up.keys || [];
+      
+      if (downKeys.length === 0 && upKeys.length === 0) {
+        console.log('Nessuna hotkey da inviare');
+        return;
+      }
+      
+      if (downKeys.length > 0) {
+        const hexCommand = convertKeysToHex(downKeys);
+        if (hexCommand) {
+          sendCommand(`hd,${faderIndex - 1},${hexCommand}`);
+          console.log(`📤 Inviato hotkey down per Fader ${faderIndex}: ${hexCommand}`);
+        }
+      }
+      
+      if (upKeys.length > 0) {
+        const hexCommand = convertKeysToHex(upKeys);
+        if (hexCommand) {
+          sendCommand(`hu,${faderIndex - 1},${hexCommand}`);
+          console.log(`📤 Inviato hotkey up per Fader ${faderIndex}: ${hexCommand}`);
+        }
+      }
+    }
+
+    function sendVolumeBitmask() {
+      const bitmask = midiOn.reduce((acc, val, i) => acc | (val ? (1 << i) : 0), 0);
+      sendCommand(`v,${bitmask}`);
+      console.log(`📤 Inviato volume bitmask: ${bitmask} (binario: ${bitmask.toString(2).padStart(NUM_FADER, '0')})`);
+    }
+
+    function updateFaderToggleUI() {
+      const halfFaders = NUM_FADER / 2;
+      if (currentSession === 'A') {
+        faderToggle.checked = faderStateA;
+        faderText.textContent = `Disabilita Fader 1-${halfFaders}`;
+        ledButton.classList.toggle('active', ledStateA);
+        ledSlider.value = ledValueA;
+      } else {
+        faderToggle.checked = faderStateB;
+        faderText.textContent = `Disabilita Fader ${halfFaders + 1}-${NUM_FADER}`;
+        ledButton.classList.toggle('active', ledStateB);
+        ledSlider.value = ledValueB;
+      }
+    }
+
+    faderToggle.addEventListener('change', () => {
+      if (currentSession === 'A') {
+        faderStateA = faderToggle.checked;
+        if (faderStateA) {
+          sendCommand("off_a");
+        } else {
+          sendCommand("on_a");
+        }
+      } else {
+        faderStateB = faderToggle.checked;
+        if (faderStateB) {
+          sendCommand("off_b");
+        } else {
+          sendCommand("on_b");
+        }
+      }
+    });
+
+    ledButton.addEventListener('click', () => {
+      if (currentSession === 'A') {
+        ledStateA = !ledStateA;
+        sendCommand(`la,${ledStateA ? 1 : 0},${ledSlider.value}`);
+      } else {
+        ledStateB = !ledStateB;
+        sendCommand(`lb,${ledStateB ? 1 : 0},${ledSlider.value}`);
+      }
+      updateFaderToggleUI();
+    });
+
+    ledSlider.addEventListener('input', () => {
+      if (currentSession === 'A') {
+        ledValueA = parseInt(ledSlider.value);
+        if (ledStateA) {
+          sendCommand(`la,1,${ledValueA}`);
+        }
+      } else {
+        ledValueB = parseInt(ledSlider.value);
+        if (ledStateB) {
+          sendCommand(`lb,1,${ledValueB}`);
+        }
+      }
+    });
+
+    saveBtn.addEventListener('click', () => {
+      sendCommand("salva");
+      alert("Configurazione salvata nel dispositivo. Premere il pulsante Disconnetti per consentire il rilevamento su altri programmi.");
+      console.log('📤 Inviato comando: salva');
+    });
+
+    function createSliders() {
+      group1.innerHTML = '';
+      group2.innerHTML = '';
+      
+      const halfFaders = NUM_FADER / 2;
+      
+      for (let i = 1; i <= halfFaders; i++) {
+        group1.appendChild(createSlider(i, `Fader ${i}`));
+      }
+      
+      for (let i = halfFaders + 1; i <= NUM_FADER; i++) {
+        group2.appendChild(createSlider(i, `Fader ${i}`));
+      }
+      
+      midiOn = new Array(NUM_FADER).fill(false);
+      hotkeyOn = new Array(NUM_FADER).fill(false);
+      midiChannels = new Array(NUM_FADER).fill(0);
+      midiControlChanges = new Array(NUM_FADER).fill(0);
+      
+      captureStates = {};
+      for (let i = 1; i <= NUM_FADER; i++) {
+        captureStates[i] = {
+          down: {capturing: false, keys: []},
+          up: {capturing: false, keys: []}
+        };
+      }
+      
+      populateSelects();
+      addEventListeners();
+      
+      console.log(`📩 Creati ${NUM_FADER} fader (${halfFaders} per gruppo)`);
+    }
+
+    const createSlider = (id, label) => {
+      const container = document.createElement('div');
+      container.className = 'slider-container';
+      container.dataset.index = id;
+
+      container.innerHTML = `
+      <div class="label">${label}</div>
+      <div class="slider-wrapper">
+        <input type="range" min="0" max="100" value="50" class="slider" id="slider${id}">
+      </div>
+      <select class="mode-select">
+        <option value="volume">Volume ${id}</option>
+        <option value="midi">MIDI</option>
+      </select>
+      <div class="midi-options">
+        <select class="channel-select">
+          <option selected disabled>Channel</option>
+        </select>
+        <select class="cc-select">
+          <option selected disabled>Control Change</option>
+        </select>
+      </div>
+      <div class="hotkey-toggle">
+        <label><input type="checkbox"> Hotkey</label>
+      </div>
+      <div class="hotkey-capture-section">
+        <div class="hotkey-capture-row">
+          <div class="hotkey-label"></div>
+          <div class="hotkey-capture-display" id="hotkey-display-down-${id}">Hotkey ⬇️</div>
+          <button class="hotkey-capture-btn" id="hotkey-capture-down-${id}">Cattura ⬇️</button>
+        </div>
+        <div class="hotkey-capture-row">
+          <div class="hotkey-label"></div>
+          <div class="hotkey-capture-display" id="hotkey-display-up-${id}">Hotkey ⬆️</div>
+          <button class="hotkey-capture-btn" id="hotkey-capture-up-${id}">Cattura ⬆️</button>
+        </div>
+        <button class="hotkey-send-btn" onclick="sendHotkeys(${id})">Invia</button>
+      </div>
+    `;
+      return container;
+    };
+
+    function updateUI(container) {
+      const select = container.querySelector('.mode-select');
+      const midi = container.querySelector('.midi-options');
+      if (select.value === 'midi') {
+        midi.style.display = 'flex';
+      } else {
+        midi.style.display = 'none';
+      }
+    }
+
+    function addEventListeners() {
+      document.querySelectorAll('.slider-container').forEach((container, index) => {
+        const modeSelect = container.querySelector('.mode-select');
+        const channelSelect = container.querySelector('.channel-select');
+        const ccSelect = container.querySelector('.cc-select');
+        const hotkeyToggle = container.querySelector('.hotkey-toggle input[type="checkbox"]');
+        const hotkeySection = container.querySelector('.hotkey-capture-section');
+        const slider = container.querySelector('.slider');
+
+        modeSelect.addEventListener('change', () => {
+          if (modeSelect.value === 'midi') {
+            midiOn[index] = true;
+            slider.classList.add('midi-mode');
+            const channelValue = parseInt(channelSelect.value) || 0;
+            const ccValue = parseInt(ccSelect.value) || 0;
+            sendCommand(`m,${index},${channelValue},${ccValue}`);
+          } else {
+            midiOn[index] = false;
+            slider.classList.remove('midi-mode');
+          }
+          
+          sendVolumeBitmask();
+          updateUI(container);
+        });
+
+        channelSelect.addEventListener('change', () => {
+          if (modeSelect.value === 'midi') {
+            const channelValue = parseInt(channelSelect.value);
+            midiChannels[index] = channelValue;
+            const ccValue = parseInt(ccSelect.value) || 0;
+            sendCommand(`m,${index},${channelValue},${ccValue}`);
+          }
+        });
+
+        ccSelect.addEventListener('change', () => {
+          if (modeSelect.value === 'midi') {
+            const ccValue = parseInt(ccSelect.value);
+            midiControlChanges[index] = ccValue;
+            const channelValue = parseInt(channelSelect.value) || 0;
+            sendCommand(`m,${index},${channelValue},${ccValue}`);
+          }
+        });
+
+        hotkeyToggle.addEventListener('change', () => {
+          hotkeyOn[index] = hotkeyToggle.checked;
+          const bitmask = hotkeyOn.reduce((acc, val, i) => acc | (val ? (1 << i) : 0), 0);
+          sendCommand(`h,${bitmask}`);
+          
+          if (hotkeySection) {
+            hotkeySection.style.display = hotkeyToggle.checked ? 'flex' : 'none';
+          }
+          
+          // Update keyboard layout section visibility
+          let anyHotkeyEnabled = hotkeyOn.some(enabled => enabled);
+          keyboardLayoutSection.style.display = anyHotkeyEnabled ? 'block' : 'none';
+          
+          if (anyHotkeyEnabled) {
+            sendKeyboardLayoutToDevice();
+          }
+        });
+        
+        updateUI(container);
+      });
+
+      document.querySelectorAll('.hotkey-capture-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.target.id;
+          const matches = id.match(/hotkey-capture-(down|up)-(\d+)/);
+          if (matches) {
+            const direction = matches[1];
+            const faderIndex = parseInt(matches[2]);
+            toggleHotkeyCapture(faderIndex, direction);
+          }
+        });
+      });
+
+      document.addEventListener('keydown', (event) => {
+        for (let faderIndex in captureStates) {
+          const fader = captureStates[faderIndex];
+          if (fader.down.capturing) {
+            handleKeyCapture(event, parseInt(faderIndex), 'down');
+            return;
+          }
+          if (fader.up.capturing) {
+            handleKeyCapture(event, parseInt(faderIndex), 'up');
+            return;
+          }
+        }
+      });
+    }
+
+    function populateSelects() {
+      const channelSelects = document.querySelectorAll('.channel-select');
+      const ccSelects = document.querySelectorAll('.cc-select');
+      
+      for (let i = 0; i <= 15; i++) {
+        const opt = new Option(`CH ${i+1}`, i);
+        channelSelects.forEach(sel => sel.appendChild(opt.cloneNode(true)));
+      }
+      
+      for (let i = 0; i <= 127; i++) {
+        const opt = new Option(`CC ${i}`, i);
+        ccSelects.forEach(sel => sel.appendChild(opt.cloneNode(true)));
+      }
+    }
+
+    // Initialize
+    detectAndSetDefaultKeyboardLayout();
+    createSliders();
+
+    // Serial connection
+    let port = null;
+    let reader = null;
+    let inputDone = null;
+    let outputDone = null;
+    let outputStream = null;
+    let writer;
+
+    connectBtn.addEventListener('click', async () => {
+      if (port) {
+        disconnect();
+        return;
+      }
+
+      try {
+        connectBtn.textContent = 'Connessione...';
+        connectBtn.disabled = true;
+        
+        console.log('🔌 Avvio connessione seriale...');
+        port = await navigator.serial.requestPort({
+          filters: [{ usbVendorId: 0x1b4f }]
+        });
+        await port.open({ baudRate: 9600 });
+
+        const encoder = new TextEncoderStream();
+        outputDone = encoder.readable.pipeTo(port.writable);
+        outputStream = encoder.writable;
+        writer = outputStream.getWriter();
+
+        const decoder = new TextDecoderStream();
+        inputDone = port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+
+        console.log('✅ Connessione seriale stabilita');
+        
+        connectBtn.textContent = 'Disconnetti';
+        connectBtn.disabled = false;
+        saveBtn.style.display = 'block';
+        saveDesc.style.display = 'block';
+        
+        console.log('✅ Connessione seriale completata');
+        
+        readSerial();
+        sendCommand("stato_iniziale");
+
+      } catch (err) {
+        console.error('❌ Errore di connessione:', err);
+        connectBtn.textContent = 'Connetti';
+        connectBtn.disabled = false;
+        
+        if (port) {
+          try {
+            await port.close();
+          } catch (closeErr) {
+            console.error('Errore chiusura porta:', closeErr);
+          }
+          port = null;
+        }
+      }
+    });
+
+    async function disconnect() {
+      try {
+        if (reader) {
+          await reader.cancel();
+          await inputDone.catch(() => {});
+          reader = null;
+          inputDone = null;
+        }
+        
+        if (writer) {
+          await writer.close();
+          writer = null;
+        }
+        
+        if (outputStream) {
+          await outputDone;
+          outputStream = null;
+          outputDone = null;
+        }
+        
+        if (port) {
+          await port.close();
+          port = null;
+        }
+        
+        connectBtn.textContent = 'Connetti';
+        saveBtn.style.display = 'none';
+        saveDesc.style.display = 'none';
+        console.log('🔌 Serial disconnected');
+      } catch (err) {
+        console.error('Errore durante la disconnessione:', err);
+        reader = null;
+        writer = null;
+        outputStream = null;
+        outputDone = null;
+        inputDone = null;
+        port = null;
+        connectBtn.textContent = 'Connetti';
+        saveBtn.style.display = 'none';
+        saveDesc.style.display = 'none';
+      }
+    }
+
+function handleMidiConfigMessage(midiData) {
+  // Il formato è: m,CCHEXCCHEXCCHEX... dove ogni fader ha 2 byte hex (canale + CC)
+  const hexData = midiData.substring(2); // Rimuove "m,"
+  
+  for (let i = 0; i < NUM_FADER && i * 4 < hexData.length; i++) {
+    const channelHex = hexData.substring(i * 4, i * 4 + 2);
+    const ccHex = hexData.substring(i * 4 + 2, i * 4 + 4);
+    
+    const channel = parseInt(channelHex, 16);
+    const controlChange = parseInt(ccHex, 16);
+    
+    if (!isNaN(channel) && !isNaN(controlChange)) {
+      midiChannels[i] = channel;
+      midiControlChanges[i] = controlChange;
+      
+      // Calcola quale container (gruppo A o B)
+      const halfFaders = NUM_FADER / 2;
+      let containerIndex, targetGroup;
+      
+      if (i < halfFaders) {
+        containerIndex = i;
+        targetGroup = document.querySelector('.container-1');
+      } else {
+        containerIndex = i - halfFaders;
+        targetGroup = document.querySelector('.container-2');
+      }
+      
+      // Trova il container specifico
+      const containers = targetGroup.querySelectorAll('.slider-container');
+      const container = containers[containerIndex];
+      
+      if (container) {
+        const channelSelect = container.querySelector('.channel-select');
+        const ccSelect = container.querySelector('.cc-select');
+        
+        if (channelSelect && ccSelect) {
+          channelSelect.value = channel;
+          ccSelect.value = controlChange;
+        }
+      }
+    }
+  }
+  
+  console.log('📩 Configurazione MIDI ricevuta:', midiChannels, midiControlChanges);
+}
+
+function handleHotkeyStateMessage(message) {
+  // Gestisce messaggi nel formato:
+  // sd,0,03F1 (hotkey down per fader 0)
+  // su,0,03F2 (hotkey up per fader 0)
+  // k,1 (lingua tastiera)
+  
+  const trimmed = message.trim();
+  
+  if (trimmed.startsWith('k,')) {
+    // Messaggio lingua tastiera: k,numero_lingua
+    const languageCode = parseInt(trimmed.substring(2));
+    if (!isNaN(languageCode) && languageCode >= 0 && languageCode <= 8) {
+      currentKeyboardLayoutCode = languageCode;
+      keyboardLayoutSelect.value = languageCode.toString();
+      console.log(`📩 Lingua tastiera ricevuta: ${languageCode}`);
+    }
+    return;
+  }
+  
+  if (!trimmed.startsWith('sd,') && !trimmed.startsWith('su,')) {
+    return; // Non è un messaggio hotkey
+  }
+  
+  // Parse del messaggio hotkey: sd,003C2 o su,103C4
+  const parts = trimmed.split(',');
+  if (parts.length !== 2) {
+    console.warn('Formato hotkey non valido:', trimmed);
+    return;
+  }
+  
+  const direction = parts[0]; // 'sd' o 'su'
+  const data = parts[1]; // es: "003C2"
+  
+  if (data.length < 5) {
+    console.warn('Dati hotkey troppo corti:', data);
+    return;
+  }
+  
+  // Il primo carattere è l'indice del fader, i restanti 4 sono l'hex
+  const faderIndex = parseInt(data.substring(0, 1));
+  const hexData = data.substring(1);
+  
+  if (isNaN(faderIndex) || faderIndex < 0 || faderIndex >= NUM_FADER) {
+    console.warn('Indice fader non valido:', faderIndex);
+    return;
+  }
+  
+  if (hexData.length !== 4) {
+    console.warn('Dati hex hotkey non validi:', hexData);
+    return;
+  }
+  
+  // Estrai modifiers e mainKey dai dati hex
+  const modifiersHex = hexData.substring(0, 2);
+  const mainKeyHex = hexData.substring(2, 4);
+  
+  const modifiers = parseInt(modifiersHex, 16);
+  const mainKey = parseInt(mainKeyHex, 16);
+  
+  if (isNaN(modifiers) || isNaN(mainKey)) {
+    console.warn('Conversione hex fallita per:', hexData);
+    return;
+  }
+  
+  // Converti da hex a tasti leggibili
+  const keys = convertHexToKeys(modifiers, mainKey);
+  
+  if (keys.length === 0) {
+    console.warn('Nessun tasto valido trovato per:', hexData);
+    return;
+  }
+  
+  // Aggiorna lo stato di cattura
+  const displayFaderIndex = faderIndex + 1; // L'interfaccia usa indici 1-based
+  const captureDirection = direction === 'sd' ? 'down' : 'up';
+  
+  if (!captureStates[displayFaderIndex]) {
+    captureStates[displayFaderIndex] = {
+      down: {capturing: false, keys: []},
+      up: {capturing: false, keys: []}
+    };
+  }
+  
+  captureStates[displayFaderIndex][captureDirection].keys = keys;
+  
+  // Aggiorna il display
+  updateHotkeyDisplay(displayFaderIndex, captureDirection);
+  
+  console.log(`📩 Hotkey ${captureDirection} ricevuta per Fader ${displayFaderIndex}: ${keys.join(' + ')}`);
+}
+
+function convertHexToKeys(modifiers, mainKey) {
+  const keys = [];
+  
+  // Aggiungi modificatori basati sui bit
+  if (modifiers & 0x01) keys.push('Ctrl');
+  if (modifiers & 0x02) keys.push('Alt');
+  if (modifiers & 0x04) keys.push('Shift');
+  if (modifiers & 0x08) keys.push('Win');
+  
+  // Trova il tasto principale nella mappa inversa
+  if (mainKey !== 0) {
+    const mainKeyName = findKeyByHex(mainKey);
+    if (mainKeyName) {
+      keys.push(mainKeyName);
+    } else {
+      // Se non trovato nella mappa, prova come carattere ASCII
+      if (mainKey >= 32 && mainKey <= 126) {
+        keys.push(String.fromCharCode(mainKey));
+      } else {
+        console.warn(`Tasto principale non mappato: 0x${mainKey.toString(16)}`);
+      }
+    }
+  }
+  
+  return keys;
+}
+
+function findKeyByHex(hexValue) {
+  // Cerca nella mappa principale
+  for (const [keyName, keyHex] of Object.entries(keyToHexMap)) {
+    if (keyHex === hexValue) {
+      return keyName;
+    }
+  }
+  
+  // Cerca nelle mappe dei caratteri speciali per layout
+  const currentLayoutCode = parseInt(keyboardLayoutSelect.value);
+  const layoutName = Object.keys(supportedLayouts).find(
+    layout => supportedLayouts[layout] === currentLayoutCode
+  );
+  
+  if (layoutName && keyboardSpecialChars[layoutName]) {
+    for (const [char, charHex] of Object.entries(keyboardSpecialChars[layoutName])) {
+      if (charHex === hexValue) {
+        return char;
+      }
+    }
+  }
+  
+  return null;
+}
+
+    async function readSerial() {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done || value === undefined) break;
+        
+        buffer += value;
+        
+        const messages = buffer.split('\n');
+        buffer = messages.pop() || '';
+        
+        messages.forEach(message => {
+          const trimmed = message.trim();
+          if (trimmed === '') return;
+          
+          if (trimmed.startsWith('f,')) {
+            const numFaderValue = parseInt(trimmed.substring(2));
+            if (!isNaN(numFaderValue) && (numFaderValue === 6 || numFaderValue === 8 || numFaderValue === 10)) {
+              NUM_FADER = numFaderValue;
+              
+              let deviceName = '';
+              if (NUM_FADER === 6) {
+                deviceName = 'TriFader';
+              } else if (NUM_FADER === 8) {
+                deviceName = 'QuadraFader';
+              } else if (NUM_FADER === 10) {
+                deviceName = 'PentaFader';
+              }
+              
+              panelTitle.innerHTML = `Configuratore <span class="fader-name">${deviceName}</span>`;
+              createSliders();
+              updateFaderToggleUI();
+            }
+          } else if (trimmed.startsWith('i,')){
+            const valoreInterruttore = parseInt(trimmed.substring(2));
+
+            if (valoreInterruttore === 0) {
+            toggle.checked = false;
+            currentSession = 'A';
+            group1.style.display = 'flex';
+            group2.style.display = 'none';
+            updateFaderToggleUI();
+          } else if (valoreInterruttore === 1) {
+            toggle.checked = true;
+            currentSession = 'B';
+            group1.style.display = 'none';
+            group2.style.display = 'flex';
+            updateFaderToggleUI();
+          } 
+
+          } else if (trimmed === 'on_a') {
+            faderStateA = false;
+            if (currentSession === 'A') {
+              faderToggle.checked = false;
+            }
+          } else if (trimmed === 'off_a') {
+            faderStateA = true;
+            if (currentSession === 'A') {
+              faderToggle.checked = true;
+            }
+          } else if (trimmed === 'on_b') {
+            faderStateB = false;
+            if (currentSession === 'B') {
+              faderToggle.checked = false;
+            }
+          } else if (trimmed === 'off_b') {
+            faderStateB = true;
+            if (currentSession === 'B') {
+              faderToggle.checked = true;
+            }
+          } else if (trimmed.startsWith('la,')) {
+            const parts = trimmed.substring(3).split(',');
+            if (parts.length >= 1) {
+              const ledValue = parseInt(parts[0]);
+              ledStateA = (ledValue === 1);
+              if (parts.length >= 2) {
+                ledValueA = parseInt(parts[1]);
+              }
+              if (currentSession === 'A') {
+                updateFaderToggleUI();
+              }
+            }
+          } else if (trimmed.startsWith('lb,')) {
+            const parts = trimmed.substring(3).split(',');
+            if (parts.length >= 1) {
+              const ledValue = parseInt(parts[0]);
+              ledStateB = (ledValue === 1);
+              if (parts.length >= 2) {
+                ledValueB = parseInt(parts[1]);
+              }
+              if (currentSession === 'B') {
+                updateFaderToggleUI();
+              }
+            }
+          } else if (trimmed.startsWith('m,') && trimmed.length > 2) {
+            handleMidiConfigMessage(trimmed);
+          }
+           else if (trimmed.startsWith('v,')) {
+            const volumeIndexValue = parseInt(trimmed.substring(2).trim());
+            handleVolumeMessage(volumeIndexValue);
+          } else if (trimmed.startsWith('h,')) {
+            const hotkeyIndexValue = parseInt(trimmed.substring(2).trim());
+            handleHotkeyMessage(hotkeyIndexValue);
+          } else if (trimmed.includes('|')) {
+            handleSliderValues(trimmed);
+          } else if (trimmed.startsWith('sd,') || trimmed.startsWith('su,') || trimmed.startsWith('k,')) {
+            handleHotkeyStateMessage(trimmed);
+          }
+        });
+      }
+    }
+
+    async function sendCommand(cmd) {
+      if (writer) {
+        await writer.write(cmd + "\n");
+        console.log("📤 Inviato:", cmd);
+      }
+    }
+
+    // Gestione spoiler hotkey
+    document.querySelector('.hotkey-spoiler-header').addEventListener('click', () => {
+      const spoiler = document.querySelector('.hotkey-spoiler');
+      spoiler.classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
