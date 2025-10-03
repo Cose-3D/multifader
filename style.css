@@ -414,16 +414,12 @@ input[type="checkbox"]:checked + .slider-switch::before {
   opacity: 0.8;
 }
 
-/* Stili per modalità MIDI - colore ciano */
-.slider::-webkit-slider-thumb.midi-active,
-.slider.midi-mode::-webkit-slider-thumb {
-  border-color: #00ffcc;
+.slider::-webkit-slider-thumb {
+  border: calc(2px * var(--base-scale)) solid var(--thumb-border-color, #666);
 }
 
-/* NUOVI STILI: Modalità volume - colore azzurro */
-.slider::-webkit-slider-thumb.volume-active,
-.slider.volume-mode::-webkit-slider-thumb {
-  border-color: #0099ff;
+.slider::-moz-range-thumb {
+  border: calc(2px * var(--base-scale)) solid var(--thumb-border-color, #666);
 }
 
 .slider::-moz-range-thumb { 
@@ -433,18 +429,6 @@ input[type="checkbox"]:checked + .slider-switch::before {
   background: #222; 
   border: calc(2px * var(--base-scale)) solid #666; 
   position: relative;
-}
-
-/* Stili per modalità MIDI - Firefox */
-.slider::-moz-range-thumb.midi-active,
-.slider.midi-mode::-moz-range-thumb {
-  border-color: #00ffcc;
-}
-
-/* NUOVI STILI: Modalità volume - Firefox */
-.slider::-moz-range-thumb.volume-active,
-.slider.volume-mode::-moz-range-thumb {
-  border-color: #0099ff;
 }
 
 #saveButton {
