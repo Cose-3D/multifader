@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Fader Mixer MIDI</title>
+  <title>Configuratore MultiFader</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -213,11 +213,25 @@ function sendKeyboardLayoutToDevice() {
         }
         updateUI(container);
       });
+      
+      // AGGIUNTO: Aggiorna i colori dopo il cambio modalità
+      const isVolumeMode = !document.getElementById('faderToggle').checked;
+      const isSessionActive = checkSessionStatus();
+      updateAllFaders(isVolumeMode, isSessionActive);
     }
 
     function handleSliderValues(valuesString) {
+      // Controlla se i fader della sessione corrente sono disabilitati
+      const isCurrentSessionDisabled = (currentSession === 'A' && faderStateA) || 
+                                      (currentSession === 'B' && faderStateB);
+      
+      // Se disabilitati, non processare i valori
+      if (isCurrentSessionDisabled) {
+        return;
+      }
+      
       const values = valuesString.split('|');
-//      console.log('📩 Valori slider ricevuti:', values);
+    //      console.log('📩 Valori slider ricevuti:', values);
       
       if (values.length === NUM_FADER) {
         values.forEach((value, index) => {
@@ -245,6 +259,15 @@ function sendKeyboardLayoutToDevice() {
     }
 
     function updateFaderDisplays(faderIndex, rawValue) {
+      // Controlla se i fader sono disabilitati per la sessione corrente
+      const isCurrentSessionDisabled = (currentSession === 'A' && faderStateA) || 
+                                      (currentSession === 'B' && faderStateB);
+      
+      // Se i fader sono disabilitati, non aggiornare i valori degli slider
+      if (isCurrentSessionDisabled) {
+        return;
+      }
+      
       const sliderValue = Math.round((rawValue / 1023) * 100);
       
       const sliderId = `slider${faderIndex}`;
@@ -287,6 +310,23 @@ function sendKeyboardLayoutToDevice() {
       }
     }
 
+    function getOperatingSystem() {
+    const platform = navigator.platform.toLowerCase();
+    const userAgent = navigator.userAgent.toLowerCase();
+    
+    if (platform.includes('mac') || userAgent.includes('mac os')) {
+      return 'mac';
+    } else if (platform.includes('linux') || userAgent.includes('linux')) {
+      return 'linux';
+    } else if (platform.includes('win') || userAgent.includes('windows')) {
+      return 'windows';
+    }
+    
+    // Fallback per sistemi non riconosciuti
+    return 'windows';
+  }
+
+// Funzione modificata per convertire le chiavi con i nomi corretti
 function convertKeysToHex(keys) {
   if (keys.length === 0) return null;
   
@@ -294,7 +334,10 @@ function convertKeysToHex(keys) {
   let mainKeyHex = 0;
   
   keys.forEach(key => {
-    switch(key.toLowerCase()) {
+    const lowerKey = key.toLowerCase();
+    
+    // Mappa i nomi OS-specifici ai valori originali per la conversione
+    switch(lowerKey) {
       case 'ctrl':
         modifiers |= 0x01;
         break;
@@ -305,6 +348,8 @@ function convertKeysToHex(keys) {
         modifiers |= 0x04;
         break;
       case 'win':
+      case 'cmd':     // macOS
+      case 'super':   // Linux
         modifiers |= 0x08;
         break;
       default:
@@ -325,11 +370,11 @@ function handleKeyCapture(event, faderIndex, direction) {
   
   const pressedKeys = [];
   
-  // Gestione dei modificatori
+  // Gestione dei modificatori con nomi OS-specifici
   if (event.ctrlKey) pressedKeys.push('Ctrl');
   if (event.altKey) pressedKeys.push('Alt');
   if (event.shiftKey) pressedKeys.push('Shift');
-  if (event.metaKey) pressedKeys.push('Win');
+  if (event.metaKey) pressedKeys.push(getModifierKeyName('Win')); // Usa il nome OS-specifico
   
   // Se è specificamente AltGraph ma non sono già stati aggiunti Ctrl+Alt
   if (event.key === 'AltGraph' && !event.ctrlKey && !event.altKey) {
@@ -368,6 +413,41 @@ function handleKeyCapture(event, faderIndex, direction) {
       }
     }, 300);
   }
+}
+
+function getModifierKeyName(key) {
+  const os = getOperatingSystem();
+  
+  const keyMappings = {
+    'win': {
+      'mac': 'Cmd',
+      'linux': 'Super',
+      'windows': 'Win'
+    },
+    'Win': {
+      'mac': 'Cmd',
+      'linux': 'Super',
+      'windows': 'Win'
+    },
+    'meta': {
+      'mac': 'Cmd',
+      'linux': 'Super', 
+      'windows': 'Win'
+    },
+    'Meta': {
+      'mac': 'Cmd',
+      'linux': 'Super',
+      'windows': 'Win'
+    }
+  };
+  
+  const lowerKey = key.toLowerCase();
+  if (keyMappings[lowerKey]) {
+    return keyMappings[lowerKey][os];
+  }
+  
+  // Tutti gli altri tasti (Ctrl, Alt, Shift, ecc.) mantengono il nome originale
+  return key;
 }
 
     function toggleHotkeyCapture(faderIndex, direction) {
@@ -410,88 +490,92 @@ function handleKeyCapture(event, faderIndex, direction) {
       display.innerHTML = keyStrings.join(' + ');
     }
 
-    const keyToHexMap = {
-      'Backspace': 0xB2,
-      'CapsLock': 0xC1,
-      'Delete': 0xD4,
-      'ArrowDown': 0xD9,
-      'End': 0xD5,
-      'Enter': 0xB0,
-      'Escape': 0xB1,
-      'Esc': 0xB1,
-      'F1': 0xC2,
-      'F2': 0xC3,
-      'F3': 0xC4,
-      'F4': 0xC5,
-      'F5': 0xC6,
-      'F6': 0xC7,
-      'F7': 0xC8,
-      'F8': 0xC9,
-      'F9': 0xCA,
-      'F10': 0xCB,
-      'F11': 0xCC,
-      'F12': 0xCD,
-      'F13': 0xF0,
-      'F14': 0xF1,
-      'F15': 0xF2,
-      'F16': 0xF3,
-      'F17': 0xF4,
-      'F18': 0xF5,
-      'F19': 0xF6,
-      'F20': 0xF7,
-      'F21': 0xF8,
-      'F22': 0xF9,
-      'F23': 0xFA,
-      'F24': 0xFB,
-      'Home': 0xD2,
-      'Insert': 0xD1,
-      'ArrowLeft': 0xD8,
-      'Left': 0xD8,
-      'AltLeft': 0x82,
-      'ControlLeft': 0x80,
-      'MetaLeft': 0x83,
-      'ShiftLeft': 0x81,
-      'ContextMenu': 0xED,
-      'Menu': 0xED,
-      'ArrowRight': 0xD7,
-      'Right': 0xD7,
-      'AltRight': 0x86,
-      'ControlRight': 0x84,
-      'MetaRight': 0x87,
-      'ShiftRight': 0x85,
-      'ScrollLock': 0xCF,
-      ' ': 0x20,
-      'Tab': 0xB3,
-      'ArrowUp': 0xDA,
-      'Up': 0xDA,
-      'Down': 0xD9,
-      'NumLock': 0xDB,
-      'PageUp': 0xD3,
-      'PageDown': 0xD6,
-      'Pause': 0xD0,
-      'PrintScreen': 0xCE,
-      'Win': 0x83,
-      'Ctrl': 0x80,
-      'Alt': 0x82,
-      'Shift': 0x81,
-      'Numpad0': 0xEA,
-      'Numpad1': 0xE1,
-      'Numpad2': 0xE2,
-      'Numpad3': 0xE3,
-      'Numpad4': 0xE4,
-      'Numpad5': 0xE5,
-      'Numpad6': 0xE6,
-      'Numpad7': 0xE7,
-      'Numpad8': 0xE8,
-      'Numpad9': 0xE9,
-      'NumpadDivide': 0xDC,
-      'NumpadDecimal': 0xEB,
-      'NumpadEnter': 0xE0,
-      'NumpadSubtract': 0xDE,
-      'NumpadMultiply': 0xDD,
-      'NumpadAdd': 0xDF,
-      'AltGraph': 0xc0
-    };
+const keyToHexMap = {
+  'Backspace': 0xB2,
+  'CapsLock': 0xC1,
+  'Delete': 0xD4,
+  'ArrowDown': 0xD9,
+  'End': 0xD5,
+  'Enter': 0xB0,
+  'Escape': 0xB1,
+  'Esc': 0xB1,
+  'F1': 0xC2,
+  'F2': 0xC3,
+  'F3': 0xC4,
+  'F4': 0xC5,
+  'F5': 0xC6,
+  'F6': 0xC7,
+  'F7': 0xC8,
+  'F8': 0xC9,
+  'F9': 0xCA,
+  'F10': 0xCB,
+  'F11': 0xCC,
+  'F12': 0xCD,
+  'F13': 0xF0,
+  'F14': 0xF1,
+  'F15': 0xF2,
+  'F16': 0xF3,
+  'F17': 0xF4,
+  'F18': 0xF5,
+  'F19': 0xF6,
+  'F20': 0xF7,
+  'F21': 0xF8,
+  'F22': 0xF9,
+  'F23': 0xFA,
+  'F24': 0xFB,
+  'Home': 0xD2,
+  'Insert': 0xD1,
+  'ArrowLeft': 0xD8,
+  'Left': 0xD8,
+  'AltLeft': 0x82,
+  'ControlLeft': 0x80,
+  'MetaLeft': 0x83,
+  'ShiftLeft': 0x81,
+  'ContextMenu': 0xED,
+  'Menu': 0xED,
+  'ArrowRight': 0xD7,
+  'Right': 0xD7,
+  'AltRight': 0x86,
+  'ControlRight': 0x84,
+  'MetaRight': 0x87,
+  'ShiftRight': 0x85,
+  'ScrollLock': 0xCF,
+  ' ': 0x20,
+  'Tab': 0xB3,
+  'ArrowUp': 0xDA,
+  'Up': 0xDA,
+  'Down': 0xD9,
+  'NumLock': 0xDB,
+  'PageUp': 0xD3,
+  'PageDown': 0xD6,
+  'Pause': 0xD0,
+  'PrintScreen': 0xCE,
+  // Nomi originali
+  'Win': 0x83,
+  'Ctrl': 0x80,
+  'Alt': 0x82,
+  'Shift': 0x81,
+  // Nomi OS-specifici
+  'Cmd': 0x83,     // macOS
+  'Super': 0x83,   // Linux
+  'Numpad0': 0xEA,
+  'Numpad1': 0xE1,
+  'Numpad2': 0xE2,
+  'Numpad3': 0xE3,
+  'Numpad4': 0xE4,
+  'Numpad5': 0xE5,
+  'Numpad6': 0xE6,
+  'Numpad7': 0xE7,
+  'Numpad8': 0xE8,
+  'Numpad9': 0xE9,
+  'NumpadDivide': 0xDC,
+  'NumpadDecimal': 0xEB,
+  'NumpadEnter': 0xE0,
+  'NumpadSubtract': 0xDE,
+  'NumpadMultiply': 0xDD,
+  'NumpadAdd': 0xDF,
+  'AltGraph': 0xc0
+};
 
     const keyboardSpecialChars = {
 'it-IT': {
@@ -646,6 +730,18 @@ function getKeyHex(key) {
         ledButton.classList.toggle('active', ledStateB);
         ledSlider.value = ledValueB;
       }
+      
+      // Aggiorna i colori dopo il cambio toggle UI
+      const isVolumeMode = !faderToggle.checked;
+      const isSessionActive = checkSessionStatus();
+      updateAllFaders(isVolumeMode, isSessionActive);
+      
+      // Se i fader vengono riabilitati, richiedi i valori correnti
+      if (!faderToggle.checked && port && writer) {
+        setTimeout(() => {
+          sendCommand("stato_slider");
+        }, 100);
+      }
     }
 
     faderToggle.addEventListener('change', () => {
@@ -664,6 +760,11 @@ function getKeyHex(key) {
           sendCommand("on_b");
         }
       }
+      
+      // AGGIUNTO: Aggiorna i colori dopo il cambio toggle
+      const isVolumeMode = !faderToggle.checked;
+      const isSessionActive = checkSessionStatus();
+      updateAllFaders(isVolumeMode, isSessionActive);
     });
 
     ledButton.addEventListener('click', () => {
@@ -741,12 +842,12 @@ function getKeyHex(key) {
         <input type="range" min="0" max="100" value="50" class="slider" id="slider${id}">
       </div>
       <select class="mode-select">
-        <option value="volume">Volume ${id}</option>
+        <option value="volume">Volume ${id-1}</option>
         <option value="midi">MIDI</option>
       </select>
       <div class="midi-options">
         <select class="channel-select">
-          <option selected disabled>Channel</option>
+          <option selected disabled>Canale</option>
         </select>
         <select class="cc-select">
           <option selected disabled>Control Change</option>
@@ -805,6 +906,11 @@ function getKeyHex(key) {
           
           sendVolumeBitmask();
           updateUI(container);
+          
+          // AGGIUNTO: Aggiorna i colori dopo il cambio modalità
+          const isVolumeMode = !document.getElementById('faderToggle').checked;
+          const isSessionActive = checkSessionStatus();
+          updateAllFaders(isVolumeMode, isSessionActive);
         });
 
         channelSelect.addEventListener('change', () => {
@@ -844,6 +950,13 @@ function getKeyHex(key) {
         });
         
         updateUI(container);
+      });
+
+      // SPOSTATO FUORI DAL FOREACH - Event listener per il toggle fader/MIDI
+      document.getElementById('faderToggle').addEventListener('change', function() {
+        const isVolumeMode = !this.checked; // Inverto perché il toggle DISABILITA
+        const isSessionActive = checkSessionStatus();
+        updateAllFaders(isVolumeMode, isSessionActive);
       });
 
       document.querySelectorAll('.hotkey-capture-btn').forEach(btn => {
@@ -892,109 +1005,119 @@ function getKeyHex(key) {
     detectAndSetDefaultKeyboardLayout();
     createSliders();
 
-    // Serial connection
-    let port = null;
-    let reader = null;
-    let inputDone = null;
-    let outputDone = null;
-    let outputStream = null;
-    let writer;
+// Serial connection
+let port = null;
+let reader = null;
+let inputDone = null;
+let outputDone = null;
+let outputStream = null;
+let writer;
 
-    connectBtn.addEventListener('click', async () => {
-      if (port) {
-        disconnect();
-        return;
-      }
-
-      try {
-        connectBtn.textContent = 'Connessione...';
-        connectBtn.disabled = true;
-        
-        console.log('🔌 Avvio connessione seriale...');
-        port = await navigator.serial.requestPort({
-          filters: [{ usbVendorId: 0x1b4f }]
-        });
-        await port.open({ baudRate: 9600 });
-
-        const encoder = new TextEncoderStream();
-        outputDone = encoder.readable.pipeTo(port.writable);
-        outputStream = encoder.writable;
-        writer = outputStream.getWriter();
-
-        const decoder = new TextDecoderStream();
-        inputDone = port.readable.pipeTo(decoder.writable);
-        reader = decoder.readable.getReader();
-
-        console.log('✅ Connessione seriale stabilita');
-        
-        connectBtn.textContent = 'Disconnetti';
-        connectBtn.disabled = false;
-        saveBtn.style.display = 'block';
-        saveDesc.style.display = 'block';
-        
-        console.log('✅ Connessione seriale completata');
-        
-        readSerial();
-        sendCommand("stato_iniziale");
-
-      } catch (err) {
-        console.error('❌ Errore di connessione:', err);
-        connectBtn.textContent = 'Connetti';
-        connectBtn.disabled = false;
-        
-        if (port) {
-          try {
-            await port.close();
-          } catch (closeErr) {
-            console.error('Errore chiusura porta:', closeErr);
-          }
-          port = null;
-        }
-      }
+connectBtn.addEventListener('click', async () => {
+  if (port) {
+    disconnect();
+   
+    const isVolumeMode = !document.getElementById('faderToggle').checked;
+    updateAllFaders(isVolumeMode, false); // false = sessione non attiva
+   
+    return;
+  }
+  try {
+    connectBtn.textContent = 'Connessione...';
+    connectBtn.disabled = true;
+ 
+    console.log('🔌 Avvio connessione seriale...');
+    port = await navigator.serial.requestPort({
+      filters: [{ usbVendorId: 0x1b4f }]
     });
-
-    async function disconnect() {
-      try {
-        if (reader) {
-          await reader.cancel();
-          await inputDone.catch(() => {});
-          reader = null;
-          inputDone = null;
-        }
-        
-        if (writer) {
-          await writer.close();
-          writer = null;
-        }
-        
-        if (outputStream) {
-          await outputDone;
-          outputStream = null;
-          outputDone = null;
-        }
-        
-        if (port) {
-          await port.close();
-          port = null;
-        }
-        
-        connectBtn.textContent = 'Connetti';
-        saveBtn.style.display = 'none';
-        saveDesc.style.display = 'none';
-        console.log('🔌 Serial disconnected');
-      } catch (err) {
-        console.error('Errore durante la disconnessione:', err);
-        reader = null;
-        writer = null;
-        outputStream = null;
-        outputDone = null;
-        inputDone = null;
-        port = null;
-        connectBtn.textContent = 'Connetti';
-        saveBtn.style.display = 'none';
-        saveDesc.style.display = 'none';
-      }
+    await port.open({ baudRate: 9600 });
+    const encoder = new TextEncoderStream();
+    outputDone = encoder.readable.pipeTo(port.writable);
+    outputStream = encoder.writable;
+    writer = outputStream.getWriter();
+    const decoder = new TextDecoderStream();
+    inputDone = port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
+    console.log('✅ Connessione seriale stabilita');
+ 
+    connectBtn.textContent = 'Disconnetti';
+    connectBtn.disabled = false;
+    saveBtn.style.display = 'block';
+    saveDesc.style.display = 'block';
+ 
+    console.log('✅ Connessione seriale completata');
+   
+    const isVolumeMode = !document.getElementById('faderToggle').checked;
+    updateAllFaders(isVolumeMode, true); // true = sessione attiva
+ 
+    readSerial();
+    sendCommand("stato_iniziale");
+  } catch (err) {
+    console.error('❌ Errore di connessione:', err);
+    
+    if (err.name === 'InvalidStateError' || err.message.includes('Failed to open serial port')) {
+      alert('⚠️ Porta seriale già in uso!\n\nLa porta è già occupata da un\'altra applicazione o scheda del browser.\n\nChiudi tutte le altre connessioni alla porta seriale e riprova.');
     }
+    
+    connectBtn.textContent = 'Connetti';
+    connectBtn.disabled = false;
+   
+    const isVolumeMode = !document.getElementById('faderToggle').checked;
+    updateAllFaders(isVolumeMode, false); // false = sessione non attiva
+ 
+    if (port) {
+      try {
+        await port.close();
+      } catch (closeErr) {
+        console.error('Errore chiusura porta:', closeErr);
+      }
+      port = null;
+    }
+  }
+});
+
+async function disconnect() {
+  try {
+    if (reader) {
+      await reader.cancel();
+      await inputDone.catch(() => {});
+      reader = null;
+      inputDone = null;
+    }
+   
+    if (writer) {
+      await writer.close();
+      writer = null;
+    }
+   
+    if (outputStream) {
+      await outputDone;
+      outputStream = null;
+      outputDone = null;
+    }
+   
+    if (port) {
+      await port.close();
+      port = null;
+    }
+   
+    connectBtn.textContent = 'Connetti';
+    saveBtn.style.display = 'none';
+    saveDesc.style.display = 'none';
+    console.log('🔌 Serial disconnected');
+  } catch (err) {
+    console.error('Errore durante la disconnessione:', err);
+    reader = null;
+    writer = null;
+    outputStream = null;
+    outputDone = null;
+    inputDone = null;
+    port = null;
+    connectBtn.textContent = 'Connetti';
+    saveBtn.style.display = 'none';
+    saveDesc.style.display = 'none';
+  }
+}
 
 function handleMidiConfigMessage(midiData) {
   // Il formato è: m,CCHEXCCHEXCCHEX... dove ogni fader ha 2 byte hex (canale + CC)
@@ -1308,6 +1431,42 @@ function findKeyByHex(hexValue) {
       const spoiler = document.querySelector('.hotkey-spoiler');
       spoiler.classList.toggle('open');
     });
+
+    // Funzione per aggiornare lo stato visivo dei fader
+function updateFaderVisualState(faderElement, isVolumeMode, isFaderEnabled, isSessionActive) {
+  const slider = faderElement.querySelector('.slider');
+  if (!slider) return;
+
+  slider.classList.remove('midi-mode', 'volume-mode');
+
+  const shouldBeBlue = isVolumeMode && isFaderEnabled && isSessionActive;
+
+  if (shouldBeBlue) {
+    slider.style.setProperty('--thumb-border-color', '#0099ff');
+  } else {
+    slider.style.setProperty('--thumb-border-color', '#666');
+  }
+}
+
+// Funzione per aggiornare tutti i fader quando cambia la modalità globale
+function updateAllFaders(isVolumeMode, isSessionActive) {
+  const faderContainers = document.querySelectorAll('.slider-container');
+  
+  faderContainers.forEach((container, index) => {
+    const modeSelect = container.querySelector('.mode-select');
+    const isMidiMode = modeSelect.value === 'midi';
+    
+    // Azzurro solo se: NON MIDI e modalità volume e sessione attiva
+    updateFaderVisualState(container, isVolumeMode && !isMidiMode, true, isSessionActive);
+  });
+}
+
+// Funzione helper per controllare lo stato della sessione
+function checkSessionStatus() {
+  const connectButton = document.getElementById('connectButton');
+  return connectButton.textContent.includes('Disconnect') || 
+         connectButton.textContent.includes('Disconnetti');
+}
   </script>
 </body>
 </html>
